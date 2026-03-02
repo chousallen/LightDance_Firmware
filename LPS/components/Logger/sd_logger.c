@@ -1,98 +1,118 @@
 #include "sd_logger.h"
-#include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "esp_log.h"
-#include "esp_vfs_fat.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
-static const char* TAG = "sd_logger";
-static FILE* log_file = NULL;
+#define BUFFER_SIZE (4 * 1024)      // ring buffer size
+#define TEMP_BUFFER_SIZE 256         //single logger size
 
-static bool is_logging = false;
-static vprintf_like_t default_vprintf = NULL;
+typedef struct {
+    char data[BUFFER_SIZE];          // data buffer
+    uint32_t head;                    // write position
+    uint32_t tail;                    // read position
+    SemaphoreHandle_t mutex;
+    FILE* file;
+    bool running;
+} ring_buffer_t;
 
-//vprintf（直接寫入檔案）
-static int sd_log_vprintf(const char *fmt, va_list l) {
+static ring_buffer_t* g_buf = NULL;
+static vprintf_like_t orig_vprintf = NULL;
+
+static void flush_buffer(void) {
+    if (!g_buf->file || g_buf->head == g_buf->tail) return;
     
-    int ret_len = 0;
-    if (is_logging && log_file) {
-        va_list l_file;
-        va_copy(l_file, l);
-        int len = vfprintf(log_file, fmt, l_file);
-        va_end(l_file);
-        
-        static int write_count = 0;
-        if(++write_count >= 10 || strchr(fmt, '\n')) {
-            fflush(log_file);
-            write_count = 0;
-        }
-        ret_len = len;
+    if (g_buf->head > g_buf->tail) {
+        //data continue in ring buffer
+        fwrite(&g_buf->data[g_buf->tail], 1, g_buf->head - g_buf->tail, g_buf->file);
     }
-    return ret_len;
+    else {
+        //data ring
+        fwrite(&g_buf->data[g_buf->tail], 1, BUFFER_SIZE - g_buf->tail, g_buf->file);
+        fwrite(g_buf->data, 1, g_buf->head, g_buf->file);
+    }
+    
+    g_buf->tail = g_buf->head;
+    fflush(g_buf->file);
 }
 
-esp_err_t sd_logger_init(const char* log_path) {
-    if(!log_path)
-        return ESP_ERR_INVALID_ARG;
-    if(is_logging)
-        return ESP_ERR_INVALID_STATE;
+static int ring_buffer_write(const char* fmt, va_list args) {
+    if (!g_buf || !g_buf->running) return 0;
+    
+    char temp[TEMP_BUFFER_SIZE];
+    int len = vsnprintf(temp, sizeof(temp), fmt, args);
+    if (len <= 0) return 0;
+    
+    xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
+    
+    uint32_t free_space;
+    if (g_buf->head >= g_buf->tail) {
+        free_space = BUFFER_SIZE - (g_buf->head - g_buf->tail) - 1;
+    }
+    else {
+        free_space = g_buf->tail - g_buf->head - 1;
+    }
+    
+    // buffer not enough -> flush
+    if (free_space < (uint32_t)len) {
+        flush_buffer();
+    }
+    
+    // write new data
+    for (int i = 0; i < len; i++) {
+        uint32_t next = (g_buf->head + 1) % BUFFER_SIZE;
+        g_buf->data[g_buf->head] = temp[i];
+        g_buf->head = next;
+    }
+    
+    xSemaphoreGive(g_buf->mutex);
+    return len;
+}
 
-    const char* vfs_path = log_path;
-    log_file = fopen(vfs_path, "w+");
-
-    if(log_file == NULL) {
-        ESP_LOGE(TAG, "Failed to open log file: %s (errno: %d)", vfs_path, errno);
+esp_err_t sd_log_init(const char* path) {
+    g_buf = heap_caps_malloc(sizeof(ring_buffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!g_buf) return ESP_ERR_NO_MEM;
+    
+    memset(g_buf, 0, sizeof(ring_buffer_t));
+    
+    g_buf->mutex = xSemaphoreCreateMutex();
+    if (!g_buf->mutex) {
+        free(g_buf);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    g_buf->file = fopen(path, "w+");
+    if (!g_buf->file) {
+        vSemaphoreDelete(g_buf->mutex);
+        free(g_buf);
         return ESP_FAIL;
     }
-    is_logging = true;
-
-    default_vprintf = esp_log_set_vprintf(sd_log_vprintf);
-
-    fprintf(log_file, "\n========== Logger Session Start ==========\n");
-    fflush(log_file);
-
-    ESP_LOGI(TAG, "SD Logger started at: %s", vfs_path);
+    
+    g_buf->running = true;
+    orig_vprintf = esp_log_set_vprintf(ring_buffer_write);
     return ESP_OK;
 }
 
-void sd_logger_deinit(void) {
-    if(!is_logging)
-        return;
-
-    fprintf(log_file, "========== Logger Session End ==========\n\n");
-    is_logging = false;
-
-    if(default_vprintf) {
-        esp_log_set_vprintf(default_vprintf);
-        default_vprintf = NULL;
-    }
-
-    if(log_file) {
-        fflush(log_file);
-        fclose(log_file);
-        log_file = NULL;
-    }
-
-    ESP_LOGI(TAG, "SD Logger closed");
-}
-
-// direct into Log
-int sd_log_printf(const char* format, ...) {
-    if(!is_logging || !log_file) {
-        return -1;
-    }
-
-    va_list args;
-    va_start(args, format);
-    int len = vfprintf(log_file, format, args);
-    va_end(args);
+esp_err_t sd_log_deinit(void) {
+    if (!g_buf) return ESP_ERR_INVALID_STATE;
     
-    static int write_count = 0;
-    if(++write_count >= 10 || strchr(format, '\n')) {
-        fflush(log_file);
-        write_count = 0;
+    g_buf->running = false;
+    
+    if (g_buf->file) {
+        xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
+        flush_buffer();
+        xSemaphoreGive(g_buf->mutex);
+        fclose(g_buf->file);
     }
     
-    return len;
+    esp_log_set_vprintf(orig_vprintf);
+    
+    if (g_buf->mutex) vSemaphoreDelete(g_buf->mutex);
+    free(g_buf);
+    g_buf = NULL;
+    
+    return ESP_OK;
 }

@@ -1,7 +1,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 
 #include "bt_receiver.h"
 #include "esp_err.h"
@@ -10,11 +10,11 @@
 #include "ld_gamma_lut.h"
 #include "nvs_flash.h"
 
+#include "esp_system.h"
 #include "player.hpp"
 #include "readframe.h"
 #include "sd_logger.h"
 #include "tcp_client.h"
-#include "esp_system.h"
 
 static const char* TAG = "APP";
 
@@ -27,22 +27,23 @@ QueueHandle_t sys_cmd_queue = NULL;
  */
 static void sys_cmd_task(void* arg) {
     sys_cmd_t msg;
-    
+
     ESP_LOGI("SYS_TASK", "System Command Task Started.");
-    
+
     while(1) {
-        if (xQueueReceive(sys_cmd_queue, &msg, portMAX_DELAY) == pdTRUE) {
+        if(xQueueReceive(sys_cmd_queue, &msg, portMAX_DELAY) == pdTRUE) {
             switch(msg) {
                 case UPLOAD:
                     ESP_LOGD("SYS_TASK", ">>> [UPLOAD] Command Received!");
                     // Stop playback and turn LEDs green to indicate update mode
-                    if(Player::getInstance().getState() != 1) Player::getInstance().stop();
+                    if(Player::getInstance().getState() != 1)
+                        Player::getInstance().stop();
                     Player::getInstance().test(0, 255, 0);
-                    
+
                     // Trigger the background TCP OTA update task
                     tcp_client_start_update_task();
                     break;
-                    
+
                 case RESET:
                     ESP_LOGD("SYS_TASK", ">>> [RESET] Command Received! Rebooting in 1s...");
                     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -51,14 +52,13 @@ static void sys_cmd_task(void* arg) {
 
                 case UPLOAD_SUCCESS:
                     ESP_LOGD("SYS_TASK", ">>> [RESET] Download Completed! Rebooting in 1s...");
-                    Player::getInstance().stop(); // Turn off LEDs before reboot
+                    Player::getInstance().stop();  // Turn off LEDs before reboot
                     vTaskDelay(pdMS_TO_TICKS(1000));
-                    esp_restart(); // Reboot to apply new files and restore clean memory state
+                    esp_restart();  // Reboot to apply new files and restore clean memory state
                     break;
 
                 default:
                     break;
-                    
             }
         }
     }
@@ -79,7 +79,7 @@ static void app_task(void* arg) {
     vTaskDelay(pdMS_TO_TICKS(1000));
 
     if(sd_err != ESP_OK) {
-        
+
         // vTaskDelay(portMAX_DELAY); // Halt task if critical files are missing
         frame_sys_ready = false;
         ESP_LOGE(TAG, "frame system init failed, halt");
@@ -114,7 +114,7 @@ static void app_task(void* arg) {
 
     // 6. Create System Command Queue and spawn its handler task
     sys_cmd_queue = xQueueCreate(10, sizeof(sys_cmd_t));
-    if (sys_cmd_queue != NULL) {
+    if(sys_cmd_queue != NULL) {
         xTaskCreate(sys_cmd_task, "sys_cmd_task", 4096, NULL, 5, NULL);
     } else {
         ESP_LOGE(TAG, "Failed to create sys_cmd_queue!");
@@ -123,7 +123,7 @@ static void app_task(void* arg) {
 #if LD_CFG_ENABLE_BT
     // 7. Initialize NVS and Bluetooth Receiver
     nvs_flash_init();
-    
+
     // Read assigned Player ID from SD card (fallback to 1 for testing)
     int player_id;
 #if LD_CFG_ENABLE_SD
@@ -132,13 +132,14 @@ static void app_task(void* arg) {
     player_id = 1;
 #endif
 
-    if(player_id == 0) ESP_LOGW(TAG,"get_sd_card_id() return 0.");
+    if(player_id == 0)
+        ESP_LOGW(TAG, "get_sd_card_id() return 0.");
 
     // Configure and start the BLE Receiver
     bt_receiver_config_t rx_cfg = {
         .feedback_gpio_num = -1,
         .manufacturer_id = 0xFFFF,
-        .my_player_id = player_id, 
+        .my_player_id = player_id,
         .sync_window_us = 500000,
         .queue_size = 20,
     };
