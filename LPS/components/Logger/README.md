@@ -1,21 +1,45 @@
-SD Logger Module for ESP32
+SD Card Logger for LPS
 ===
 
-A lightweight logging utility designed to redirect ESP_LOG messages and custom strings directly to an SD Card via the FATFS file system.
+## 1. API usage
 
-1.API Reference
----
-**esp_err_t sd_logger_init(const char* log_path)**
+### Initialization
+```
+sd_log_init(const char* log_path);
 
-Initializes the logger, opens the logger file, hooks into the ESP-IDF logging system.Redirects vprintf to write to the SD card.
+// for example : esp_err_t sd_log_init("/sd/logger.log");
+```
 
-**void sd_logger_deinit(void)**
+After initialization, all ESP_LOGx macros re-direct write to *log_path in SD card.
 
-Safely stops the logger by restores the original vprintf function, flushes remaining data, and closes the file.
+This API must be called after the SD card is successfully mounted. In LPS, this means calling it after frame_system_init() which handles the SD card mounting process.
 
-**int sd_log_printf(const char* format, ...)**
+|  Return Value   |  Explaination |
+|  :---  | :---  |
+| ESP_OK  | Initialization successful |
+| ESP_ERR_NO_MEM  | Memory allocation failed (ring buffer or mutex) |
+| ESP_FAIL  | File open failed (SD card not mounted or path invalid) |
 
-Bypasses the standard ESP-IDF log level formatting to write a raw string directly to the SD card.
+### Deinitialization
+```
+sd_log_deinit(void);
 
-2.Error Message Glossary
----
+// for example : esp_err_t sd_log_deinit(void);
+```
+
+After initialization, all ESP_LOGx macros re-direct write to *log_path in SD card.
+
+This API must be called after the SD card is successfully mounted. In LPS, this means calling it after frame_system_init() which handles the SD card mounting process.
+
+|  Return Value   |  Explaination |
+|  :---  | :---  |
+| ESP_OK  | Deinitialization successful |
+| ESP_ERR_INVALID_STATE  | Logger was not initialized |
+
+## 2. How It Works
+
+The logger uses a 4KB ring buffer to store log messages temporarily. When the buffer is full or during deinitialization, data is flushed to the log file in SD card. This approach:
+
+- Reduces SD card wear by minimizing write operations
+- Prevents task blocking during file I/O
+- Uses thread-safe mutex for multi-tasking environments

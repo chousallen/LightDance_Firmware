@@ -84,7 +84,7 @@ esp_err_t sd_log_init(const char* path) {
         return ESP_ERR_NO_MEM;
     }
     
-    g_buf->file = fopen(path, "w+");
+    g_buf->file = fopen(path, "a+");
     if (!g_buf->file) {
         vSemaphoreDelete(g_buf->mutex);
         free(g_buf);
