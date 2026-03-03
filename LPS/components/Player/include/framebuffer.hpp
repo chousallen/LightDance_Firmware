@@ -20,7 +20,8 @@ enum class FbComputeStatus : uint8_t {
     OK = 0,
     HOLD,
     EOF_REACHED,
-    ERROR,
+    ERROR_GENERAL, 
+    ERROR_CRITICAL
 };
 
 class FrameBuffer {
@@ -53,6 +54,7 @@ class FrameBuffer {
 
     table_frame_t frame0{}, frame1{};
 
+    bool is_frame_system_init = true;
     table_frame_t* current;
     table_frame_t* next;
 

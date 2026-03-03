@@ -104,7 +104,6 @@ esp_err_t Player::resetPlayback() {
     ESP_RETURN_ON_ERROR(clock.pause(), TAG, "Failed to pause clock");
     ESP_RETURN_ON_ERROR(clock.reset(), TAG, "Failed to reset clock");
     ESP_RETURN_ON_ERROR(fb.reset(), TAG, "Failed to reset framebuffer");
-
     controller.fill(GRB_BLACK);
     controller.show();
 
@@ -115,12 +114,18 @@ esp_err_t Player::updatePlayback() {
     const uint64_t time_ms = clock.now_us() / 1000;
 
     FbComputeStatus fb_status = fb.compute(time_ms);
-    if(fb_status == FbComputeStatus::ERROR) {
-        ESP_LOGE(TAG, "framebuffer compute failed");
+    if(fb_status == FbComputeStatus::ERROR_GENERAL) {
+        ESP_LOGE(TAG, "framebuffer compute general error");
         Event e{};
         e.type = EVENT_STOP;
         ESP_RETURN_ON_ERROR(sendEvent(e), TAG, "stop event on framebuffer error");
         // return ESP_FAIL;
+    }
+    else if(fb_status == FbComputeStatus::ERROR_CRITICAL) {
+        ESP_LOGE(TAG, "framebuffer compute critical error");
+        Event e{};
+        e.type = EVENT_RELEASE;
+        ESP_RETURN_ON_ERROR(sendEvent(e), TAG, "release event on framebuffer critical error");
     }
 
     frame_data* buf = fb.get_buffer();
