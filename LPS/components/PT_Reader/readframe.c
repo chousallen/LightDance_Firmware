@@ -85,7 +85,6 @@ static esp_err_t mount_sdcard(void) {
 static void unmount_sdcard(void)
 {
     if (g_sd_card) {
-        /* 配對 esp_vfs_fat_sdmmc_mount("/sd", ..., &g_sd_card) */
         esp_vfs_fat_sdcard_unmount("/sd", g_sd_card);
         g_sd_card = NULL;
     }
