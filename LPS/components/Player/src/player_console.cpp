@@ -92,6 +92,10 @@ static int cmd_test(int argc, char** argv) {
     Player::getInstance().test(r, g, b);
     return 0;
 }
+static int cmd_sdtest(int argc, char** argv) {
+        Player::getInstance().sdtest();
+        return 0;
+}
 
 /* ================= register commands ================= */
 
@@ -116,6 +120,7 @@ static void register_all_commands(void) {
     // register_cmd("load", "load frames", &cmd_load);
     register_cmd("test", "test rgb output", &cmd_test);
     register_cmd("exit", "exit player", &cmd_exit);
+    register_cmd("sdtest", "test sd card", &cmd_sdtest); 
 }
 
 /* ================= console entry ================= */

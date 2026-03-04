@@ -33,6 +33,7 @@ class Player {
     esp_err_t test();
     esp_err_t test(uint8_t, uint8_t, uint8_t);
     esp_err_t exit();
+    esp_err_t sdtest();
     uint8_t getState() {
         return (uint8_t)m_state;
     }
