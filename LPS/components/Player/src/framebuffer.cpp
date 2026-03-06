@@ -189,7 +189,7 @@ FbComputeStatus FrameBuffer::handle_frames(uint64_t time_ms) {
         if(err == ESP_ERR_INVALID_SIZE) {
             ESP_LOGE(TAG, "read_frame failed: %s", esp_err_to_name(err));
             buffer = current->data;
-            return FbComputeStatus::ERROR_CRITICAL;
+            return FbComputeStatus::ERROR_GENERAL;
         }
         if(err == ESP_ERR_INVALID_ARG) {
             ESP_LOGE(TAG, "read_frame failed: %s", esp_err_to_name(err));
@@ -199,17 +199,17 @@ FbComputeStatus FrameBuffer::handle_frames(uint64_t time_ms) {
         if(err == ESP_ERR_INVALID_CRC) {
             ESP_LOGE(TAG, "read_frame failed: %s", esp_err_to_name(err));
             buffer = current->data;
-            return FbComputeStatus::ERROR_CRITICAL;
+            return FbComputeStatus::ERROR_GENERAL;
         }
         if(err == ESP_FAIL) {
             ESP_LOGE(TAG, "read_frame failed: %s", esp_err_to_name(err));
             buffer = current->data;
-            return FbComputeStatus::ERROR_CRITICAL;
+            return FbComputeStatus::ERROR_GENERAL;
         }
         if(err == ESP_ERR_INVALID_STATE) {
             ESP_LOGE(TAG, "read_frame failed: %s", esp_err_to_name(err));
             buffer = current->data;
-            return FbComputeStatus::ERROR_CRITICAL;
+            return FbComputeStatus::ERROR_GENERAL;
         }
         // print_table_frame(*next);
 #else
