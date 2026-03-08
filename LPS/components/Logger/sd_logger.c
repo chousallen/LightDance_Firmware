@@ -6,9 +6,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "unistd.h"
 
-#define BUFFER_SIZE (4 * 1024)      // ring buffer size
+#define BUFFER_SIZE (4*1024)      // ring buffer size
 #define TEMP_BUFFER_SIZE 256         //single logger size
+static const char* TAG = "LOGGER";
 
 typedef struct {
     char data[BUFFER_SIZE];          // data buffer
@@ -25,18 +27,21 @@ static vprintf_like_t orig_vprintf = NULL;
 static void flush_buffer(void) {
     if (!g_buf->file || g_buf->head == g_buf->tail) return;
     
+    size_t written = 0;
     if (g_buf->head > g_buf->tail) {
-        //data continue in ring buffer
-        fwrite(&g_buf->data[g_buf->tail], 1, g_buf->head - g_buf->tail, g_buf->file);
-    }
-    else {
-        //data ring
-        fwrite(&g_buf->data[g_buf->tail], 1, BUFFER_SIZE - g_buf->tail, g_buf->file);
-        fwrite(g_buf->data, 1, g_buf->head, g_buf->file);
+        written = fwrite(&g_buf->data[g_buf->tail], 1, 
+                        g_buf->head - g_buf->tail, g_buf->file);
+    } else {
+        written = fwrite(&g_buf->data[g_buf->tail], 1, 
+                        BUFFER_SIZE - g_buf->tail, g_buf->file);
+        written += fwrite(g_buf->data, 1, g_buf->head, g_buf->file);
     }
     
-    g_buf->tail = g_buf->head;
-    fflush(g_buf->file);
+    if (written > 0) {
+        g_buf->tail = (g_buf->tail + written) % BUFFER_SIZE;
+        fflush(g_buf->file);
+        fsync(fileno(g_buf->file)); 
+    }
 }
 
 static int ring_buffer_write(const char* fmt, va_list args) {
@@ -74,8 +79,8 @@ static int ring_buffer_write(const char* fmt, va_list args) {
 
 esp_err_t sd_log_init(const char* path) {
     g_buf = heap_caps_malloc(sizeof(ring_buffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        
     if (!g_buf) return ESP_ERR_NO_MEM;
-    
     memset(g_buf, 0, sizeof(ring_buffer_t));
     
     g_buf->mutex = xSemaphoreCreateMutex();
@@ -90,9 +95,12 @@ esp_err_t sd_log_init(const char* path) {
         free(g_buf);
         return ESP_FAIL;
     }
-    
+    fflush(g_buf->file);
     g_buf->running = true;
+    
     orig_vprintf = esp_log_set_vprintf(ring_buffer_write);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    sd_log_flush();
     return ESP_OK;
 }
 
@@ -113,6 +121,16 @@ esp_err_t sd_log_deinit(void) {
     if (g_buf->mutex) vSemaphoreDelete(g_buf->mutex);
     free(g_buf);
     g_buf = NULL;
+    
+    return ESP_OK;
+}
+
+esp_err_t sd_log_flush(void) {
+    if (!g_buf || !g_buf->running) return ESP_ERR_INVALID_STATE;
+    
+    xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
+    flush_buffer();
+    xSemaphoreGive(g_buf->mutex);
     
     return ESP_OK;
 }

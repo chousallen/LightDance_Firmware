@@ -27,13 +27,30 @@ sd_log_deinit(void);
 // for example : esp_err_t sd_log_deinit(void);
 ```
 
-After initialization, all ESP_LOGx macros re-direct write to *log_path in SD card.
-
-This API must be called after the SD card is successfully mounted. In LPS, this means calling it after frame_system_init() which handles the SD card mounting process.
+Call this API when SD logging is no longer needed, typically before system shutdown or SD card unmount. 
+It flushes remaining data from ring buffer to file and releases resources.
 
 |  Return Value   |  Explaination |
 |  :---  | :---  |
 | ESP_OK  | Deinitialization successful |
+| ESP_ERR_INVALID_STATE  | Logger was not initialized |
+
+### Flush
+```
+esp_err_t sd_log_flush(void);
+
+// for example : sd_log_flush();
+```
+Manually force write buffered logs from ring buffer to SD card.
+Use this API when you need to ensure logs are written immediately:
+
+- Before system reset or deep sleep
+- At critical checkpoints
+- After important log messages
+
+|  Return Value   |  Explaination |
+|  :---  | :---  |
+| ESP_OK  | Flush successful |
 | ESP_ERR_INVALID_STATE  | Logger was not initialized |
 
 ## 2. How It Works

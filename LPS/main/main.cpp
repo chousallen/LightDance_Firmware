@@ -16,6 +16,9 @@
 #include "sd_logger.h"
 #include "tcp_client.h"
 
+#include <stdio.h>
+#include <string.h>
+
 static const char* TAG = "APP";
 
 // System state flags and global queue
@@ -76,11 +79,11 @@ static void app_task(void* arg) {
     ESP_LOGI(TAG, "frame_system_init=%s", esp_err_to_name(sd_err));
     ESP_LOGI(TAG, "HWM after frame_system_init=%u", uxTaskGetStackHighWaterMark(NULL));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    //vTaskDelay(pdMS_TO_TICKS(1000));
 
     if(sd_err != ESP_OK) {
 
-        // vTaskDelay(portMAX_DELAY); // Halt task if critical files are missing
+        vTaskDelay(portMAX_DELAY); // Halt task if critical files are missing
         frame_sys_ready = false;
         ESP_LOGE(TAG, "frame system init failed, halt");
     } else {
@@ -88,11 +91,11 @@ static void app_task(void* arg) {
 
 #if LD_CFG_ENABLE_LOGGER
         // 2. Initialize SD Logger (Optional)
-        esp_err_t log_err = sd_logger_init("/sd/LOGGER.log");
+        esp_err_t log_err = sd_log_init("/sd/logger.log");
         if(log_err != ESP_OK) {
             ESP_LOGE(TAG, "SD Logger init failed: %s", esp_err_to_name(log_err));
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        sd_log_flush();
 #endif
     }
 #endif
