@@ -16,7 +16,7 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
-#include "sd_writer.h"
+#include "sd_writer.h"  
 #include "bt_receiver.h"
 #include "readframe.h"
 
@@ -230,6 +230,12 @@ static void update_task_func(void *pvParameters) {
                 ESP_LOGE(TAG, "Socket connect failed: errno %d", errno);
             } else {
                 ESP_LOGI(TAG, "Connected to %s:%d", TCP_SERVER_IP, TCP_SERVER_PORT);
+
+                // Optimize socket for bulk receive throughput (mirrors tcp_client reference)
+                int rcvbuf = 65536;
+                setsockopt(sock, SOL_SOCKET,  SO_RCVBUF,   &rcvbuf,  sizeof(rcvbuf));
+                int nodelay = 1;
+                setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
                 // [Step 3] Message Player ID
 #if LD_CFG_ENABLE_SD
