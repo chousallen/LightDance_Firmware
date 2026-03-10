@@ -206,17 +206,20 @@ static void send_ack_task(void *arg) {
     
     // Payload Length = 12
     raw_data[idx++] = 12; 
-    raw_data[idx++] = 0xFF; raw_data[idx++] = 0xFF; raw_data[idx++] = 0xFF; // Type + Mfg ID
-    raw_data[idx++] = CMD_TYPE_ACK; // 0x07
+    raw_data[idx++] = 0xFF;
+    raw_data[idx++] = 0x4C; 
+    raw_data[idx++] = 0x44; 
+    raw_data[idx++] = CMD_TYPE_ACK;
     
     raw_data[idx++] = params->my_id;
     raw_data[idx++] = params->cmd_id;
     raw_data[idx++] = params->cmd_type;
     
-    raw_data[idx++] = (params->delay_val >> 24) & 0xFF;
-    raw_data[idx++] = (params->delay_val >> 16) & 0xFF;
-    raw_data[idx++] = (params->delay_val >> 8) & 0xFF;
-    raw_data[idx++] = (params->delay_val) & 0xFF;
+    uint32_t delay_ms = params->delay_val / 1000;
+    raw_data[idx++] = (delay_ms >> 24) & 0xFF;
+    raw_data[idx++] = (delay_ms >> 16) & 0xFF;
+    raw_data[idx++] = (delay_ms >> 8) & 0xFF;
+    raw_data[idx++] = (delay_ms) & 0xFF;
 
     raw_data[idx++] = params->state;
     
@@ -248,7 +251,6 @@ static void send_ack_task(void *arg) {
 // Parse advertising packet directly in ISR context for ultra-low latency
 static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
     int64_t now_us = esp_timer_get_time();
-    // Basic HCI LE Meta Event header check
     if(data[0] != 0x04 || data[1] != 0x3E || data[3] != 0x02) return;
 
     uint8_t num_reports = data[4];
@@ -265,48 +267,67 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
             if(ad_len == 0) break;
             uint8_t ad_type = adv_data[offset++];
 
-            // Check if it's Manufacturer Specific Data (0xFF)
-            if(ad_type == 0xFF && ad_len >= 16) {
-                uint16_t target_id = s_config.manufacturer_id;
-                // Verify Manufacturer ID
-                if(adv_data[offset] == (target_id & 0xFF) && adv_data[offset + 1] == ((target_id >> 8) & 0xFF)) {
-                    uint64_t rcv_mask = 0;
-                    for(int k = 0; k < 8; k++) rcv_mask |= ((uint64_t)adv_data[offset + 3 + k] << (k * 8));
-
-                    bool is_target = false;
-                    if (rcv_mask == 0xFFFFFFFFFFFFFFFFULL) {
-                        is_target = true; 
+            if(ad_type == 0xFF && ad_len >= 3) {
+                if(adv_data[offset] == 0x4C && adv_data[offset + 1] == 0x44) {
+                    
+                    uint8_t rcv_cmd_byte = adv_data[offset + 2];
+                    uint8_t rcv_cmd_id   = (rcv_cmd_byte >> 4) & 0x0F;
+                    uint8_t rcv_cmd      = rcv_cmd_byte & 0x0F;
+                    
+                    bool is_length_valid = false;
+                    
+                    if (rcv_cmd == 0x01 && ad_len == 20) {
+                        is_length_valid = true; // PLAY: 16 base + 4 prep_led
+                    } else if (rcv_cmd == 0x05 && ad_len == 19) {
+                        is_length_valid = true; // TEST: 16 base + 3 RGB
+                    } else if (rcv_cmd == 0x06 && ad_len == 17) {
+                        is_length_valid = true; // CANCEL: 16 base + 1 target_cmd_id
+                    } else if ((rcv_cmd == 0x02 || rcv_cmd == 0x03 || rcv_cmd == 0x04 || 
+                                rcv_cmd == 0x07 || rcv_cmd == 0x08 || rcv_cmd == 0x09) && ad_len == 16) {
+                        is_length_valid = true; // 16 base
                     }
-                    else{
-                        if ((rcv_mask >> s_config.my_player_id) & 1ULL) {
-                            is_target = true;
+                    if(is_length_valid) {
+                        uint64_t rcv_mask = 0;
+                        for(int k = 0; k < 8; k++) rcv_mask |= ((uint64_t)adv_data[offset + 3 + k] << (k * 8));
+
+                        bool is_target = false;
+                        if (rcv_mask == 0xFFFFFFFFFFFFFFFFULL) is_target = true; 
+                        else if ((rcv_mask >> s_config.my_player_id) & 1ULL) is_target = true;
+
+                        if(is_target) {
+                            uint32_t rcv_delay_ms = (adv_data[offset + 11] << 24) | (adv_data[offset + 12] << 16) | (adv_data[offset + 13] << 8) | adv_data[offset + 14];
+                            
+                            uint32_t rcv_prep_ms = 0;
+                            uint8_t rcv_data[3] = {0, 0, 0};
+                            
+                            int spec_idx = offset + 15;
+                            if (rcv_cmd == 0x01) { 
+                                rcv_prep_ms = (adv_data[spec_idx] << 24) | (adv_data[spec_idx + 1] << 16) | (adv_data[spec_idx + 2] << 8) | adv_data[spec_idx + 3];
+                            } else if (rcv_cmd == 0x05) { 
+                                rcv_data[0] = adv_data[spec_idx];
+                                rcv_data[1] = adv_data[spec_idx + 1];
+                                rcv_data[2] = adv_data[spec_idx + 2];
+                            } else if (rcv_cmd == 0x06) { 
+                                rcv_data[0] = adv_data[spec_idx];
+                            }
+
+                            ble_rx_packet_t pkt;
+                            pkt.cmd_id = rcv_cmd_id;
+                            pkt.cmd_type = rcv_cmd;
+                            pkt.target_mask = rcv_mask;
+                            pkt.delay_val = rcv_delay_ms * 1000ULL;
+                            pkt.prep_time = rcv_prep_ms * 1000ULL;
+                            pkt.data[0] = rcv_data[0];
+                            pkt.data[1] = rcv_data[1];
+                            pkt.data[2] = rcv_data[2];
+                            pkt.rssi = rssi;
+                            pkt.rx_time_us = now_us;
+
+                            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                            xQueueSendFromISR(s_adv_queue, &pkt, &xHigherPriorityTaskWoken);
+                            if(xHigherPriorityTaskWoken) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+                            return;
                         }
-                    }
-
-                    if(is_target) {
-                        uint8_t rcv_cmd_id = (adv_data[offset + 2] >> 4) & 0x0F;
-                        uint8_t rcv_cmd = adv_data[offset + 2] & 0x0F;
-                        uint32_t rcv_delay = (adv_data[offset + 11] << 24) | (adv_data[offset + 12] << 16) | (adv_data[offset + 13] << 8) | (adv_data[offset + 14]);
-                        uint32_t rcv_prep_time = (adv_data[offset + 15] << 24) | (adv_data[offset + 16] << 16) | (adv_data[offset + 17] << 8) | (adv_data[offset + 18]);
-                        uint8_t rcv_data[3] = {adv_data[offset + 19], adv_data[offset + 20], adv_data[offset + 21]};
-
-                        // Push raw data to FreeRTOS queue
-                        ble_rx_packet_t pkt;
-                        pkt.cmd_id = rcv_cmd_id;
-                        pkt.cmd_type = rcv_cmd;
-                        pkt.target_mask = rcv_mask;
-                        pkt.delay_val = rcv_delay;
-                        pkt.prep_time = rcv_prep_time;
-                        pkt.data[0] = rcv_data[0];
-                        pkt.data[1] = rcv_data[1];
-                        pkt.data[2] = rcv_data[2];
-                        pkt.rssi = rssi;
-                        pkt.rx_time_us = now_us;
-
-                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                        xQueueSendFromISR(s_adv_queue, &pkt, &xHigherPriorityTaskWoken);
-                        if(xHigherPriorityTaskWoken) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-                        return;
                     }
                 }
             }
