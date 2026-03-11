@@ -63,10 +63,12 @@ def read_frame_file(of_channel, strip_channel, frame_num):
         print(f"Frame size: {frame_size} bytes")
         
         frame_count = 0
-        while True:
+        while True:  # 改為使用已知的 frame_num
             frame_data = file.read(frame_size)
             if len(frame_data) != frame_size:
                 break
+            
+            tester = 0
             
             offset = 0
             start_time = struct.unpack_from('<I', frame_data, offset)[0]
@@ -83,6 +85,7 @@ def read_frame_file(of_channel, strip_channel, frame_num):
                     r = frame_data[offset + 1]
                     b = frame_data[offset + 2]
                     offset += 3
+                    tester = tester + r + g + b
                     print(f"  OF[{i}]: G={g:03d}, R={r:03d}, B={b:03d}")
             
             for i, strip_leds in enumerate(strip_channel):
@@ -92,15 +95,18 @@ def read_frame_file(of_channel, strip_channel, frame_num):
                         r = frame_data[offset + 1]
                         b = frame_data[offset + 2]
                         offset += 3
+                        tester = tester + r + g + b
                         print(f"  LED[{i}][{j}]: G={g:03d}, R={r:03d}, B={b:03d}")
             
             stored_checksum = struct.unpack_from('<I', frame_data, offset)[0]
             print(f"  Checksum: {stored_checksum:08X}")
             
             frame_count += 1
+            
+            if tester != 0:
+                input("按 Enter 鍵繼續下一幀...")
         
         print(f"\nTotal frames read: {frame_count}")
-
 
 version, of_channel, strip_channel, frame_num = read_control_file()
   

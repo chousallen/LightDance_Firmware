@@ -98,7 +98,6 @@ static void app_task(void* arg) {
             ESP_LOGE(TAG, "SD Logger init failed: %s", esp_err_to_name(log_err));
         }
         ESP_LOGI(TAG, "logger init success");
-        sd_log_flush();
 #endif
     }
 #endif
@@ -120,6 +119,7 @@ static void app_task(void* arg) {
 
     // 6. Create System Command Queue and spawn its handler task
     sys_cmd_queue = xQueueCreate(10, sizeof(sys_cmd_t));
+    sd_log_flush();
     if(sys_cmd_queue != NULL) {
         xTaskCreate(sys_cmd_task, "sys_cmd_task", 4096, NULL, 5, NULL);
     } else {
