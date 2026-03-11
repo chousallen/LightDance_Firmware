@@ -20,7 +20,8 @@ typedef struct {
     uint32_t prep_time;
     uint8_t data[3];
     int8_t rssi;
-    int64_t rx_time_us; 
+    int64_t rx_time_us;
+    uint8_t mac[6];
 } ble_rx_packet_t;
 
 // --- cmd type ---

@@ -257,6 +257,7 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
     uint8_t* payload = &data[5];
 
     for(int i = 0; i < num_reports; i++) {
+        uint8_t* mac = &payload[2];
         uint8_t data_len = payload[8];
         uint8_t* adv_data = &payload[9];
         int8_t rssi = payload[9 + data_len];
@@ -267,67 +268,55 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
             if(ad_len == 0) break;
             uint8_t ad_type = adv_data[offset++];
 
-            if(ad_type == 0xFF && ad_len >= 3) {
+            if(ad_type == 0xFF && ad_len == 20) {
                 if(adv_data[offset] == 0x4C && adv_data[offset + 1] == 0x44) {
                     
                     uint8_t rcv_cmd_byte = adv_data[offset + 2];
                     uint8_t rcv_cmd_id   = (rcv_cmd_byte >> 4) & 0x0F;
                     uint8_t rcv_cmd      = rcv_cmd_byte & 0x0F;
                     
-                    bool is_length_valid = false;
-                    
-                    if (rcv_cmd == 0x01 && ad_len == 20) {
-                        is_length_valid = true; // PLAY: 16 base + 4 prep_led
-                    } else if (rcv_cmd == 0x05 && ad_len == 19) {
-                        is_length_valid = true; // TEST: 16 base + 3 RGB
-                    } else if (rcv_cmd == 0x06 && ad_len == 17) {
-                        is_length_valid = true; // CANCEL: 16 base + 1 target_cmd_id
-                    } else if ((rcv_cmd == 0x02 || rcv_cmd == 0x03 || rcv_cmd == 0x04 || 
-                                rcv_cmd == 0x07 || rcv_cmd == 0x08 || rcv_cmd == 0x09) && ad_len == 16) {
-                        is_length_valid = true; // 16 base
-                    }
-                    if(is_length_valid) {
-                        uint64_t rcv_mask = 0;
-                        for(int k = 0; k < 8; k++) rcv_mask |= ((uint64_t)adv_data[offset + 3 + k] << (k * 8));
+                    uint64_t rcv_mask = 0;
+                    for(int k = 0; k < 8; k++) rcv_mask |= ((uint64_t)adv_data[offset + 3 + k] << (k * 8));
 
-                        bool is_target = false;
-                        if (rcv_mask == 0xFFFFFFFFFFFFFFFFULL) is_target = true; 
-                        else if ((rcv_mask >> s_config.my_player_id) & 1ULL) is_target = true;
+                    bool is_target = false;
+                    if ((rcv_mask >> s_config.my_player_id) & 1ULL) is_target = true;
 
-                        if(is_target) {
-                            uint32_t rcv_delay_ms = (adv_data[offset + 11] << 24) | (adv_data[offset + 12] << 16) | (adv_data[offset + 13] << 8) | adv_data[offset + 14];
-                            
-                            uint32_t rcv_prep_ms = 0;
-                            uint8_t rcv_data[3] = {0, 0, 0};
-                            
-                            int spec_idx = offset + 15;
-                            if (rcv_cmd == 0x01) { 
-                                rcv_prep_ms = (adv_data[spec_idx] << 24) | (adv_data[spec_idx + 1] << 16) | (adv_data[spec_idx + 2] << 8) | adv_data[spec_idx + 3];
-                            } else if (rcv_cmd == 0x05) { 
-                                rcv_data[0] = adv_data[spec_idx];
-                                rcv_data[1] = adv_data[spec_idx + 1];
-                                rcv_data[2] = adv_data[spec_idx + 2];
-                            } else if (rcv_cmd == 0x06) { 
-                                rcv_data[0] = adv_data[spec_idx];
-                            }
+                    if(is_target) {
+                        ESP_LOGI(TAG, "Rx CMD: 0x%02X from MAC [%02X:%02X:%02X:%02X:%02X:%02X]", 
+                                 rcv_cmd, mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
-                            ble_rx_packet_t pkt;
-                            pkt.cmd_id = rcv_cmd_id;
-                            pkt.cmd_type = rcv_cmd;
-                            pkt.target_mask = rcv_mask;
-                            pkt.delay_val = rcv_delay_ms * 1000ULL;
-                            pkt.prep_time = rcv_prep_ms * 1000ULL;
-                            pkt.data[0] = rcv_data[0];
-                            pkt.data[1] = rcv_data[1];
-                            pkt.data[2] = rcv_data[2];
-                            pkt.rssi = rssi;
-                            pkt.rx_time_us = now_us;
-
-                            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                            xQueueSendFromISR(s_adv_queue, &pkt, &xHigherPriorityTaskWoken);
-                            if(xHigherPriorityTaskWoken) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-                            return;
+                        uint32_t rcv_delay_ms = (adv_data[offset + 11] << 24) | (adv_data[offset + 12] << 16) | (adv_data[offset + 13] << 8) | adv_data[offset + 14];
+                        
+                        uint32_t rcv_prep_ms = 0;
+                        uint8_t rcv_data[3] = {0, 0, 0};
+                        
+                        int spec_idx = offset + 15;
+                        if (rcv_cmd == 0x01) { 
+                            rcv_prep_ms = (adv_data[spec_idx] << 24) | (adv_data[spec_idx + 1] << 16) | (adv_data[spec_idx + 2] << 8) | adv_data[spec_idx + 3];
+                        } else if (rcv_cmd == 0x05) { 
+                            rcv_data[0] = adv_data[spec_idx];
+                            rcv_data[1] = adv_data[spec_idx + 1];
+                            rcv_data[2] = adv_data[spec_idx + 2];
+                        } else if (rcv_cmd == 0x06) { 
+                            rcv_data[0] = adv_data[spec_idx];
                         }
+
+                        ble_rx_packet_t pkt;
+                        pkt.cmd_id = rcv_cmd_id;
+                        pkt.cmd_type = rcv_cmd;
+                        pkt.target_mask = rcv_mask;
+                        pkt.delay_val = rcv_delay_ms * 1000ULL;
+                        pkt.prep_time = rcv_prep_ms * 1000ULL;
+                        pkt.data[0] = rcv_data[0];
+                        pkt.data[1] = rcv_data[1];
+                        pkt.data[2] = rcv_data[2];
+                        pkt.rssi = rssi;
+                        pkt.rx_time_us = now_us;
+                        memcpy(pkt.mac, mac, 6);
+                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                        xQueueSendFromISR(s_adv_queue, &pkt, &xHigherPriorityTaskWoken);
+                        if(xHigherPriorityTaskWoken) portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+                        return;
                     }
                 }
             }
@@ -463,7 +452,7 @@ static void sync_process_task(void* arg) {
     bool collecting = false;
     bool window_expired = false;
     int64_t window_start_time = 0;
-
+    uint8_t current_mac[6] = {0};
     ESP_LOGI(TAG, "Sync Task Running...");
 
     while(s_is_running) {
@@ -485,6 +474,7 @@ static void sync_process_task(void* arg) {
                 count = 1;
                 window_start_time = now;
                 window_expired = false;
+                memcpy(current_mac, pkt.mac, 6);
             }
             else {
                 if (pkt.cmd_id == current_cmd_id) {
@@ -512,9 +502,9 @@ static void sync_process_task(void* arg) {
                             esp_timer_start_once(target_slot->timer_handle, wait_us);
                             
                             if (!s_visual_ack_done[current_cmd_id]) {
-                                ESP_LOGI(TAG, "LOCKED -> ID:%d, CMD:0x%02X, AvgRSSI:%d dBm (Cnt:%d), Delay:%lld ms", 
+                                ESP_LOGI(TAG, "LOCKED -> MAC:%02X:%02X:%02X:%02X:%02X:%02X, ID:%d, CMD:0x%02X, AvgRSSI:%d dBm (Cnt:%d), Delay:%lld ms", 
+                                         current_mac[5], current_mac[4], current_mac[3], current_mac[2], current_mac[1], current_mac[0],
                                          current_cmd_id, current_cmd, avg_rssi, count, wait_us/1000);
-                                         
                                 // Visual ACK: Flash RED led instantly for PLAY
                                 if (current_cmd == 0x01 && current_prep_time > 0) {
                                     Player::getInstance().test(255, 0, 0); 
@@ -545,6 +535,7 @@ static void sync_process_task(void* arg) {
                     sum_rssi = pkt.rssi;
                     window_start_time = now;
                     window_expired = false;
+                    memcpy(current_mac, pkt.mac, 6);
                     sum_target = (pkt.rx_time_us + pkt.delay_val);
                     count = 1;
                 }
@@ -572,9 +563,9 @@ static void sync_process_task(void* arg) {
                              esp_timer_start_once(target_slot->timer_handle, wait_us);
                              
                              if (!s_visual_ack_done[current_cmd_id]) {
-                                 ESP_LOGI(TAG, "LOCKED -> ID:%d, CMD:0x%02X, AvgRSSI:%d dBm (Cnt:%d), Delay:%lld ms", 
+                                 ESP_LOGI(TAG, "LOCKED -> MAC:%02X:%02X:%02X:%02X:%02X:%02X, ID:%d, CMD:0x%02X, AvgRSSI:%d dBm (Cnt:%d), Delay:%lld ms", 
+                                          current_mac[5], current_mac[4], current_mac[3], current_mac[2], current_mac[1], current_mac[0],
                                           current_cmd_id, current_cmd, avg_rssi, count, wait_us/1000);
-                                 
                                  // Visual ACK: Flash RED led instantly for PLAY
                                  if (current_cmd == 0x01 && current_prep_time > 0) {
                                      Player::getInstance().test(255, 0, 0);
