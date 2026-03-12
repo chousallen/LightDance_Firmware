@@ -50,6 +50,8 @@ static void sys_cmd_task(void* arg) {
                 case RESET:
                     ESP_LOGD("SYS_TASK", ">>> [RESET] Command Received! Rebooting in 1s...");
                     vTaskDelay(pdMS_TO_TICKS(1000));
+                    ESP_LOGI("SYS_TASK", "System will reboot, start flushing logs...");
+                    vTaskDelay(pdMS_TO_TICKS(100));  // Give time for log to be written to buffer
                     sd_log_flush();
                     esp_restart();
                     break;
@@ -58,6 +60,8 @@ static void sys_cmd_task(void* arg) {
                     ESP_LOGD("SYS_TASK", ">>> [RESET] Download Completed! Rebooting in 1s...");
                     Player::getInstance().stop();  // Turn off LEDs before reboot
                     vTaskDelay(pdMS_TO_TICKS(1000));
+                    ESP_LOGI("SYS_TASK", "System will reboot, start flushing logs...");
+                    vTaskDelay(pdMS_TO_TICKS(100));  // Give time for log to be written to buffer
                     sd_log_flush();
                     esp_restart();  // Reboot to apply new files and restore clean memory state
                     break;
