@@ -61,10 +61,10 @@ static int ring_buffer_write(const char* fmt, va_list args) {
         free_space = g_buf->tail - g_buf->head - 1;
     }
     
-    // buffer not enough -> flush
-    if (free_space < (uint32_t)len) {
-        flush_buffer();
-    }
+    // // buffer not enough -> flush
+    // if (free_space < (uint32_t)len) {
+    //     flush_buffer();
+    // }
     
     // write new data
     for (int i = 0; i < len; i++) {
@@ -72,6 +72,9 @@ static int ring_buffer_write(const char* fmt, va_list args) {
         g_buf->data[g_buf->head] = temp[i];
         g_buf->head = next;
     }
+    
+    // flush to ensure every log is written to SD in time
+    flush_buffer();
     
     xSemaphoreGive(g_buf->mutex);
     return len;
