@@ -1,18 +1,54 @@
-SD Card Logger for LPS
+SD Card Modules for LPS
 ===
 
-## 1. API usage
+## 1. SD Mount API
+
+### Mount SD Card
+
+```c
+esp_err_t mount_sdcard(void);
+// example: mount_sdcard();
+```
+
+Mounts SD card to /sd directory. Must be called before any SD file operations
+
+|  Return Value   |  Explaination |
+|  :---  | :---  |
+| ESP_OK  | Mount successful |
+| ESP_FAIL  | Mount failed (no card, wrong format, etc.) |
+
+### Unmount SD Card
+
+```c
+void unmount_sdcard(void);
+// example: unmount_sdcard();
+```
+
+Unmounts SD card. Call before system shutdown.
+
+### Get SD Card ID
+
+```c
+int get_sd_card_id(void);
+// example: int id = get_sd_card_id();
+```
+
+Returns player ID from SD card volume label:
+
+- Label "LPS01" ~ "LPS31" → returns 1~31
+- Otherwise → returns 0
+
+## 2. SD Logger API
 
 ### Initialization
-```
+```c
 sd_log_init(const char* log_path);
 
 // for example : esp_err_t sd_log_init("/sd/logger.log");
 ```
 
-After initialization, all ESP_LOGx macros re-direct write to *log_path in SD card.
-
-This API must be called after the SD card is successfully mounted. In LPS, this means calling it after frame_system_init() which handles the SD card mounting process.
+After initialization, all ESP_LOGx macros write to SD card.
+Note: Must be called after SD card is mounted.
 
 |  Return Value   |  Explaination |
 |  :---  | :---  |
@@ -21,7 +57,7 @@ This API must be called after the SD card is successfully mounted. In LPS, this 
 | ESP_FAIL  | File open failed (SD card not mounted or path invalid) |
 
 ### Deinitialization
-```
+```c
 sd_log_deinit(void);
 
 // for example : esp_err_t sd_log_deinit(void);
@@ -36,7 +72,7 @@ It flushes remaining data from ring buffer to file and releases resources.
 | ESP_ERR_INVALID_STATE  | Logger was not initialized |
 
 ### Flush
-```
+```c
 esp_err_t sd_log_flush(void);
 
 // for example : sd_log_flush();
@@ -53,7 +89,8 @@ Use this API when you need to ensure logs are written immediately:
 | ESP_OK  | Flush successful |
 | ESP_ERR_INVALID_STATE  | Logger was not initialized |
 
-## 2. How It Works
+
+### How Logger Works
 
 The logger uses a 4KB ring buffer to store log messages temporarily. When the buffer is full or during deinitialization, data is flushed to the log file in SD card. This approach:
 

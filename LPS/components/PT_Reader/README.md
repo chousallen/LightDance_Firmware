@@ -41,8 +41,6 @@ direction TB
 
     INITED --> UNINIT: frame_system_deinit()
 
-    STOPPED
-
     note right of STOPPED: internal fatal error
 ```
 
@@ -55,8 +53,6 @@ Description of each state :
 | **INITED**  | System initialized, ready to read   | inited = 1 <br> running = 0 <br> eof_reached = 0 |
 | **ACTIVE**  | Reader is actively reading frames   | inited = 1 <br> running = 1 <br> eof_reached = 0 |
 | **EOF**     | End of frame.dat reached            | inited = 1 <br> running = 1 <br> eof_reached = 1 |
-| **STOPPED** | Fatal error occurred, reader halted | inited = 0 <br> running = 0 <br> eof_reached = 0 |
-
 
 
 ## 2. FSM API
@@ -71,7 +67,6 @@ Initialize the pattern table reader system
 | INITED  | INITED | ESP_ERR_INVALID_STATE |
 | ACTIVE  | ACTIVE | ESP_ERR_INVALID_STATE |
 | EOF  | EOF | ESP_ERR_INVALID_STATE |
-| STOPPED  | STOPPED | ESP_ERR_INVALID_STATE |
 
 <br>
 
@@ -88,7 +83,6 @@ Initialize the pattern table reader system
 | ESP_ERR_INVALID_SIZE     | Frame size exceeds FRAME_RAW_MAX_SIZE |
 | ESP_ERR_INVALID_CRC      | control.dat checksum mismatch         |
 
-
 ---
 
 ### 2. read_frame(table_frame_t* playerbuffer)
@@ -102,7 +96,6 @@ Reading next frame data
 | ACTIVE  | ACTIVE | ESP_OK |
 | ACTIVE  | EOF | ESP_ERR_NOT_FOUND |
 | EOF  | EOF | ESP_ERR_NOT_FOUND |
-| STOPPED  | STOPPED | ESP_ERR_INVALID_STATE |
 
 <br>
 
@@ -110,7 +103,7 @@ Reading next frame data
 
 |  Return type   |  Description |
 |  :---  | :---  |
-| ESP_ERR_INVALID_STATE  | Called in UNINIT or STOPPED state |
+| ESP_ERR_INVALID_STATE  | System not initialized (UNINIT state) |
 | ESP_ERR_NOT_FOUND  | No more frames to read, system enters EOF state |
 | ESP_ERR_INVALID_SIZE | Frame file corrupted: incomplete frame read (expected size mismatch) |
 | ESP_ERR_INVALID_ARG  | Invalid playerbuffer or NULL |
@@ -129,7 +122,6 @@ Reset reader pointer back to start of frame.dat (frame 0)
 | INITED  | INITED | ESP_OK |
 | ACTIVE  | INITED | ESP_OK |
 | EOF  | INITED | ESP_OK |
-| STOPPED  | STOPPED | ESP_ERR_INVALID_STATE |
 
 ---
 
@@ -150,9 +142,3 @@ Leave and close the pattern table reader system, release resource
 ### is_eof_reached(void)
 
 - return eof_reached ( True / False )
-
-### get_sd_card_id(void)
-
-- return ID 1~31 if label of SD card is "LPS01" ~ "LPS31"
-
-- return 0 for other cases

@@ -32,7 +32,7 @@ Render logic is centered in `FrameBuffer` (`src/framebuffer.cpp`).
 
 ## Data Source
 
-- If `LD_CFG_ENABLE_SD` is enabled: `read_frame(...)`
+- If `LD_CFG_ENABLE_PT` is enabled: `read_frame(...)`
 - Otherwise: `test_read_frame(...)`
 
 ## Output Contract

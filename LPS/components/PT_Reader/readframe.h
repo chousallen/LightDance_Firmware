@@ -30,7 +30,6 @@ extern ch_info_t ch_info_snapshot;
  * @brief 初始化整個 frame system
  *
  * 會完成：
- *   - SD card mount
  *   - 讀取 control.dat → ch_info
  *   - 初始化 frame_reader
  *   - 建立 SD reader task
@@ -77,8 +76,6 @@ esp_err_t frame_reset(void);
  * 安全可重入
  */
 esp_err_t frame_system_deinit(void);
-
-int get_sd_card_id(void);
 
 bool is_eof_reached(void);
 

@@ -9,7 +9,7 @@
  */
 
 /* Feature toggles */
-#define LD_CFG_ENABLE_SD 1
+#define LD_CFG_ENABLE_PT 1
 #define LD_CFG_ENABLE_BT 1
 #define LD_CFG_ENABLE_LOGGER 1
 

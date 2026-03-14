@@ -1,12 +1,11 @@
 #include "readframe.h"
 #include "frame_reader.h"
+#include "control_reader.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
-#include "ff.h"
 
-#include "control_reader.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -15,7 +14,7 @@
 /* ========================================================= */
 ch_info_t ch_info_snapshot;
 
-static const char* TAG = "readframe";
+static const char* TAG = "READFRAME";
 
 /* ================= runtime state ================= */
 
@@ -24,19 +23,19 @@ static table_frame_t frame_buf; /* single internal buffer */
 static SemaphoreHandle_t sem_free;  /* buffer writable */
 static SemaphoreHandle_t sem_ready; /* buffer readable */
 
-static TaskHandle_t sd_task = NULL;
+static TaskHandle_t pt_task = NULL;
 
 static bool inited = false;
 static bool running = false;
 static bool eof_reached = false;
 static bool has_error = false;
 
-/* ================= SD task command ================= */
+/* ================= PT task command ================= */
 
 typedef enum {
     CMD_NONE = 0,
     CMD_RESET,
-} sd_cmd_t;
+} pt_cmd_t;
 
 typedef struct{
     esp_err_t err;
@@ -44,54 +43,11 @@ typedef struct{
 
 static volatile frame_status_t g_frame_status = { .err = ESP_OK };
 
-static sd_cmd_t cmd = CMD_NONE;
+static pt_cmd_t cmd = CMD_NONE;
 
-/* ================= SD mount ================= */
+/* ================= PT reader task ================= */
 
-#include "driver/sdmmc_host.h"
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-
-static sdmmc_card_t* g_sd_card = NULL;
-
-static esp_err_t mount_sdcard(void) {
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024,
-        .disk_status_check_enable = false,
-        .use_one_fat = false,
-    };
-
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.flags = SDMMC_HOST_FLAG_4BIT;
-    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.width = 4;
-    slot_config.gpio_cd = GPIO_NUM_NC;
-    slot_config.gpio_wp = GPIO_NUM_NC;
-    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sd", &host, &slot_config, &mount_config, &g_sd_card);
-    if(ret != ESP_OK) {
-        ESP_LOGE(TAG, "SD mount failed (%s)", esp_err_to_name(ret));
-        return ret;
-    }
-
-    return ESP_OK;
-}
-
-static void unmount_sdcard(void)
-{
-    if (g_sd_card) {
-        esp_vfs_fat_sdcard_unmount("/sd", g_sd_card);
-        g_sd_card = NULL;
-    }
-}
-/* ================= SD reader task ================= */
-
-static void sd_reader_task(void* arg) {
+static void pt_reader_task(void* arg) {
     while(running) {
 
         /* wait until buffer free */
@@ -141,8 +97,8 @@ static void sd_reader_task(void* arg) {
         xSemaphoreGive(sem_ready);
     }
 
-    ESP_LOGI(TAG, "sd_reader_task exit");
-    sd_task = NULL;
+    ESP_LOGI(TAG, "pt_reader_task exit");
+    pt_task = NULL;
     vTaskDelete(NULL);
 }
 
@@ -157,11 +113,6 @@ esp_err_t frame_system_init(const char* control_path, const char* frame_path) {
         ESP_LOGE(TAG, "frame system already initialized");
         return ESP_ERR_INVALID_STATE;
     }
-
-    /* ---------- 0. mount SD ---------- */
-    err = mount_sdcard();
-    if(err != ESP_OK)
-        return err;
 
     /* ---------- 1. load control.dat -> ch_info ---------- */
     err = get_channel_info(control_path, &ch_info);
@@ -197,8 +148,8 @@ esp_err_t frame_system_init(const char* control_path, const char* frame_path) {
     cmd     = CMD_NONE;
     eof_reached = false;
 
-    /* ---------- 5. create SD reader task ---------- */
-    xTaskCreate(sd_reader_task, "sd_reader", 16384, NULL, 5, &sd_task);
+    /* ---------- 5. create PT reader task ---------- */
+    xTaskCreate(pt_reader_task, "pt_reader", 16384, NULL, 5, &pt_task);
 
     inited = true;
 
@@ -265,12 +216,11 @@ esp_err_t frame_system_deinit(void) {
 
     if (sem_free) xSemaphoreGive(sem_free);
 
-    for (int i = 0; i < 50 && sd_task != NULL; i++) { 
+    for (int i = 0; i < 50 && pt_task != NULL; i++) { 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    frame_reader_deinit();
-    unmount_sdcard();                            
+    frame_reader_deinit();                     
     if(sem_free)  vSemaphoreDelete(sem_free);
     if(sem_ready) vSemaphoreDelete(sem_ready);
     sem_free = sem_ready = NULL;
@@ -280,7 +230,7 @@ esp_err_t frame_system_deinit(void) {
     has_error = false;
     g_frame_status.err = ESP_OK;
     cmd = CMD_NONE;
-    sd_task = NULL;
+    pt_task = NULL;
 
     return ESP_OK;
 }
@@ -291,30 +241,4 @@ bool is_eof_reached(void) {
         return false;
     }
     return eof_reached;
-}
-
-/* ---- get sd card id ---- */
-int get_sd_card_id(void) {
-    if(g_sd_card == NULL) {
-        return 0;
-    }
-    
-    char volume_label[20];
-    FRESULT res = f_getlabel("0:", volume_label, NULL);
-    
-    if(res != FR_OK || volume_label[0] == '\0') {
-        return 0;
-    }
-    if(strncmp(volume_label, "LPS", 3) != 0) {
-        return 0;
-    }
-    
-    char* num_str = volume_label + 3;
-    int id = atoi(num_str);
-    
-    if(id >= 1 && id <= 31) {
-        return id;
-    }
-    
-    return 0;
 }

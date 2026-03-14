@@ -41,7 +41,7 @@ esp_err_t FrameBuffer::init() {
     memset(&buffer, 0, sizeof(buffer));
 
     count = 0;
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
     read_frame(current);
     // print_table_frame(*current);
 
@@ -67,7 +67,7 @@ esp_err_t FrameBuffer::reset() {
     memset(&frame1, 0, sizeof(frame1));
     memset(&buffer, 0, sizeof(buffer));
 
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
     frame_reset();
 
     read_frame(current);
@@ -175,7 +175,7 @@ FbComputeStatus FrameBuffer::handle_frames(uint64_t time_ms) {
     while(time_ms >= next->timestamp) {
         std::swap(current, next);
 
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
         esp_err_t err = read_frame(next);
         if(err == ESP_ERR_NOT_FOUND) {
             buffer = current->data;

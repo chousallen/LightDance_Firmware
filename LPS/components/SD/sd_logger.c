@@ -80,7 +80,7 @@ static int ring_buffer_write(const char* fmt, va_list args) {
     return len;
 }
 
-esp_err_t sd_log_init(const char* path) {
+esp_err_t sd_log_init() {
     ESP_LOGI(TAG, "logger initializing");
     g_buf = heap_caps_malloc(sizeof(ring_buffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         
@@ -94,17 +94,17 @@ esp_err_t sd_log_init(const char* path) {
     }
 
     //update logger name while reset
-    char new_path[32];
+    char path[32];
     int index = 1;
     while (1) {
-        snprintf(new_path, sizeof(new_path), "/sd/logger%d.log", index);
-        FILE* test = fopen(new_path, "r");
+        snprintf(path, sizeof(path), "/sd/logger%d.log", index);
+        FILE* test = fopen(path, "r");
         if (!test) break;
         fclose(test);
         index++;
     }
 
-    g_buf->file = fopen(new_path, "w+");
+    g_buf->file = fopen(path, "w+");
     if (!g_buf->file) {
         vSemaphoreDelete(g_buf->mutex);
         free(g_buf);

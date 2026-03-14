@@ -19,6 +19,7 @@
 #include "sd_writer.h"  
 #include "bt_receiver.h"
 #include "readframe.h"
+#include "sd_mount.h"
 
 static const char *TAG = "TCP_CLIENT";
 
@@ -146,7 +147,7 @@ static esp_err_t download_file(int sock, const char* filename) {
         return ESP_FAIL;
     }
 
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
     // 2. Initialize SD writer (only execute when SD card is enabled)
     if (sd_writer_init(filename) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init sd_writer for %s", filename);
@@ -164,14 +165,14 @@ static esp_err_t download_file(int sock, const char* filename) {
         int n = recv_exact(sock, buf, to_read);
         if (n <= 0) {
             ESP_LOGE(TAG, "Socket error during download");
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
             sd_writer_close();
 #endif
             free(buf);
             return ESP_FAIL;
         }
 
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
         // Perform real SD card write
         if (sd_writer_write(buf, n) != ESP_OK) {
             ESP_LOGE(TAG, "SD Write failed");
@@ -186,7 +187,7 @@ static esp_err_t download_file(int sock, const char* filename) {
         remaining -= n;
     }
 
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
     sd_writer_close();
 #endif
     free(buf);
@@ -238,7 +239,7 @@ static void update_task_func(void *pvParameters) {
                 setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 
                 // [Step 3] Message Player ID
-#if LD_CFG_ENABLE_SD
+#if LD_CFG_ENABLE_PT
                 int pid = get_sd_card_id();
                 if (pid <= 0) pid = 1; // Fallback protection
 #else

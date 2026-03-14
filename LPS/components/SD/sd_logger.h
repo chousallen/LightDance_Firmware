@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-esp_err_t sd_log_init(const char* path);
+esp_err_t sd_log_init();
 esp_err_t sd_log_deinit(void);
 esp_err_t sd_log_flush(void);
 

@@ -82,7 +82,7 @@ All headers under `components/ld_core/inc` are treated as public.
 ### `ld_config.h`
 
 Global compile-time flags and limits, including:
-- `LD_CFG_ENABLE_SD`, `LD_CFG_ENABLE_BT`, `LD_CFG_ENABLE_LOGGER`
+- `LD_CFG_ENABLE_PT`, `LD_CFG_ENABLE_BT`, `LD_CFG_ENABLE_LOGGER`
 - `LD_CFG_PCA9955B_MAX_BRIGHTNESS_R/G/B`
 - `LD_CFG_WS2812B_MAX_BRIGHTNESS`
 - `LD_CFG_I2C_FREQ_HZ`, `LD_CFG_I2C_TIMEOUT_MS`, `LD_CFG_RMT_TIMEOUT_MS`
