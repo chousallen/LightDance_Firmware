@@ -188,6 +188,11 @@ static void app_task(void* arg) {
     console_test();
 #endif
 
+    // Indicate the initialization is completed.
+    Player::getInstance().test(0, 0, 255);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    Player::getInstance().stop();
+
     // Initialization complete, delete setup task to free memory
     vTaskDelete(NULL);
 }
