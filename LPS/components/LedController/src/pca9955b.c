@@ -131,19 +131,17 @@ esp_err_t pca9955b_show(pca9955b_dev_t* pca9955b) {
     // 1. Input Validation
     ESP_RETURN_ON_FALSE(pca9955b, ESP_ERR_INVALID_ARG, TAG, "Handle is NULL");
 
-    // 2. IREF Restoration Logic (Recover from previous failure)
-    if(pca9955b->need_reset_IREF) {
-        ret = i2c_master_transmit(pca9955b->i2c_dev_handle, IREF_cmd, sizeof(IREF_cmd), LD_CFG_I2C_TIMEOUT_MS);
+    // 2. Restore IREF before every frame.
+    // We currently do this unconditionally because the device may lose IREF unexpectedly.
+    ret = i2c_master_transmit(pca9955b->i2c_dev_handle, IREF_cmd, sizeof(IREF_cmd), LD_CFG_I2C_TIMEOUT_MS);
 
-        if(ret == ESP_OK) {
-            pca9955b->need_reset_IREF = false; /*!< IREF reset completed */
-            ESP_LOGD(TAG, "PCA9955B IREF recovered");
-        } else {
-            // If IREF fails, we can't show colors properly anyway.
-            ESP_LOGW(TAG, "Failed to restore IREF: %s", esp_err_to_name(ret));
-            return ret;
-        }
+    if(ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to restore IREF: %s", esp_err_to_name(ret));
+        return ret;
     }
+
+    pca9955b->need_reset_IREF = false; /*!< IREF reset completed */
+    ESP_LOGD(TAG, "PCA9955B IREF recovered");
 
     // 3. Transmit Buffer (Burst Write)
     // Send 16 bytes: Command Byte (PWM0 + AI) + 15 Color Bytes
