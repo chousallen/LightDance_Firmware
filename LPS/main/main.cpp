@@ -121,7 +121,7 @@ static void app_task(void* arg) {
 
     if(err != ESP_OK) {
         frame_inited = false;
-        vTaskDelay(portMAX_DELAY);  // Halt task if critical files are missing
+        // vTaskDelay(portMAX_DELAY);  // Halt task if critical files are missing
         frame_sys_ready = false;
         ESP_LOGE(TAG, "frame system init failed");
     } else {
@@ -189,7 +189,7 @@ static void app_task(void* arg) {
 #endif
 
     // Indicate the initialization is completed.
-    Player::getInstance().test(0, 0, 255);
+    Player::getInstance().test(0, 0, 128);
     vTaskDelay(pdMS_TO_TICKS(500));
     Player::getInstance().stop();
 
