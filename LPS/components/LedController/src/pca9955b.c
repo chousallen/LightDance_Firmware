@@ -202,3 +202,18 @@ esp_err_t pca9955b_fill(pca9955b_dev_t* pca9955b, grb8_t color) {
 
     return ESP_OK;
 }
+
+bool pca9955b_check_iref(pca9955b_dev_t* pca9955b) {
+    uint8_t iref0_reg_addr = 0x18 | PCA9955B_AUTO_INC;
+    uint8_t iref_val[15] = {0};
+
+    i2c_master_transmit_receive(pca9955b->i2c_dev_handle, &iref0_reg_addr, sizeof(iref0_reg_addr), iref_val, sizeof(iref_val), LD_CFG_I2C_TIMEOUT_MS);
+
+    for(int i = 0; i < 15; i++) {
+        if(iref_val[i] != 0xff) {
+            return false;
+        }
+    }
+
+    return true;
+}

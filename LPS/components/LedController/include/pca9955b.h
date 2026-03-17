@@ -47,6 +47,8 @@ esp_err_t pca9955b_fill(pca9955b_dev_t* pca9955b, grb8_t color);
 /* Transmission */
 esp_err_t pca9955b_show(pca9955b_dev_t* pca9955b);
 
+bool pca9955b_check_iref(pca9955b_dev_t* pca9955b);
+
 #ifdef __cplusplus
 }
 #endif

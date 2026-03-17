@@ -173,6 +173,9 @@ esp_err_t LedController::show() {
             ESP_LOGD(TAG, "Skip PCA9955B[%d] (disabled)", i);
             continue;
         }
+        if(!pca9955b_check_iref(&pca9955b_devs[i])) {
+            ESP_LOGE(TAG, "IREF check failed for PCA9955B[%d]", i);
+        }
         err = pca9955b_show(&pca9955b_devs[i]);
         if(err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to show PCA9955B[%d]: %s", i, esp_err_to_name(err));
@@ -207,6 +210,9 @@ esp_err_t LedController::show() {
         if(!pca_enable[i]) {
             ESP_LOGD(TAG, "Skip PCA9955B[%d] (disabled)", i);
             continue;
+        }
+        if(!pca9955b_check_iref(&pca9955b_devs[i])) {
+            ESP_LOGE(TAG, "IREF check failed for PCA9955B[%d]", i);
         }
         err = pca9955b_show(&pca9955b_devs[i]);
         if(err != ESP_OK) {
