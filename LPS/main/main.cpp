@@ -133,6 +133,25 @@ static void app_task(void* arg) {
 
 #endif
 
+    esp_reset_reason_t reason = esp_reset_reason();
+
+    switch(reason) {
+        case ESP_RST_POWERON:
+            ESP_LOGI(TAG, "Power on reset");
+            break;
+        case ESP_RST_PANIC:
+            ESP_LOGE(TAG, "System panic reset");
+            break;
+        case ESP_RST_TASK_WDT:
+            ESP_LOGE(TAG, "Task watchdog reset");
+            break;
+        case ESP_RST_BROWNOUT:
+            ESP_LOGE(TAG, "Brownout reset");
+            break;
+        default:
+            ESP_LOGW(TAG, "Reset reason: %d", reason);
+    }
+
     // 3. Pre-calculate Gamma Lookup Table for LED color correction
     calc_gamma_lut();
 
@@ -151,7 +170,7 @@ static void app_task(void* arg) {
 
     // 6. Create System Command Queue and spawn its handler task
     sys_cmd_queue = xQueueCreate(10, sizeof(sys_cmd_t));
-    //sd_log_flush();
+    // sd_log_flush();
     if(sys_cmd_queue != NULL) {
         xTaskCreate(sys_cmd_task, "sys_cmd_task", 4096, NULL, 5, NULL);
     } else {
