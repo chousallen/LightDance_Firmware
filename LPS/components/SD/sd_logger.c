@@ -93,7 +93,6 @@ static void flush_task(void* arg) {
 
 esp_err_t sd_log_init() {
     ESP_LOGI(TAG, "logger initializing");
-    sd_utils_init_time();
     g_buf = heap_caps_malloc(sizeof(ring_buffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         
     if (!g_buf) return ESP_ERR_NO_MEM;
@@ -107,7 +106,7 @@ esp_err_t sd_log_init() {
 
     //update logger name while reset
     //use 8.3 filename for FATfs
-    char path[16];
+    char path[32];
     int index = 1;
     struct stat st;
     while (1) {
@@ -125,6 +124,7 @@ esp_err_t sd_log_init() {
     }
     fflush(g_buf->file);
     g_buf->running = true;
+    ESP_LOGI(TAG, "log path: %s", path);
     
     xTaskCreate(flush_task, "sd_logger_flush", 2048, NULL, 1, &g_buf->task);
     orig_vprintf = esp_log_set_vprintf(ring_buffer_write);
