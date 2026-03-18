@@ -1,4 +1,5 @@
 #include "sd_logger.h"
+#include "sd_utils.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -7,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "unistd.h"
+#include <sys/stat.h>
 
 #define BUFFER_SIZE (4*1024)      // ring buffer size
 #define TEMP_BUFFER_SIZE 256         //single logger size
@@ -91,6 +93,7 @@ static void flush_task(void* arg) {
 
 esp_err_t sd_log_init() {
     ESP_LOGI(TAG, "logger initializing");
+    sd_utils_init_time();
     g_buf = heap_caps_malloc(sizeof(ring_buffer_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         
     if (!g_buf) return ESP_ERR_NO_MEM;
@@ -103,16 +106,17 @@ esp_err_t sd_log_init() {
     }
 
     //update logger name while reset
-    char path[32];
+    //use 8.3 filename for FATfs
+    char path[16];
     int index = 1;
+    struct stat st;
     while (1) {
-        snprintf(path, sizeof(path), "/sd/logger%d.log", index);
-        FILE* test = fopen(path, "r");
-        if (!test) break;
-        fclose(test);
+        snprintf(path, sizeof(path), "/sd/log%d.log", index); //don't exceed 8 char for logXXX.log
+        if (stat(path, &st) != 0) {
+            break;
+        }
         index++;
     }
-
     g_buf->file = fopen(path, "w+");
     if (!g_buf->file) {
         vSemaphoreDelete(g_buf->mutex);
