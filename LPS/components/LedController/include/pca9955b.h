@@ -30,6 +30,7 @@ typedef struct {
     pca9955b_buffer_t buffer; /*!< PWM register + LED color buffer */
 
     bool need_reset_IREF; /*!< Set true if IREF register needs to be reinitialized */
+    bool iref_loss;
 } pca9955b_dev_t;
 
 /* Bus lifecycle */

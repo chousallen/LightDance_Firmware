@@ -67,6 +67,7 @@ esp_err_t pca9955b_init(pca9955b_dev_t* pca9955b, uint8_t i2c_addr, i2c_master_b
 
     pca9955b->i2c_addr = i2c_addr;
     pca9955b->need_reset_IREF = true;
+    pca9955b->iref_loss = false;
 
     pca9955b->buffer.command_byte = PCA9955B_PWM0_ADDR | PCA9955B_AUTO_INC;
     memset(pca9955b->buffer.data, 0, sizeof(pca9955b->buffer.data));
@@ -137,6 +138,7 @@ esp_err_t pca9955b_show(pca9955b_dev_t* pca9955b) {
 
         if(ret == ESP_OK) {
             pca9955b->need_reset_IREF = false; /*!< IREF reset completed */
+            pca9955b->iref_loss = false;       /*!< Resume IREF monitoring after recovery */
             ESP_LOGD(TAG, "PCA9955B IREF recovered");
         } else {
             // If IREF fails, we can't show colors properly anyway.
@@ -206,11 +208,18 @@ esp_err_t pca9955b_fill(pca9955b_dev_t* pca9955b, grb8_t color) {
 bool pca9955b_check_iref(pca9955b_dev_t* pca9955b) {
     uint8_t iref0_reg_addr = 0x18 | PCA9955B_AUTO_INC;
     uint8_t iref_val[15] = {0};
+    esp_err_t ret = ESP_OK;
 
-    i2c_master_transmit_receive(pca9955b->i2c_dev_handle, &iref0_reg_addr, sizeof(iref0_reg_addr), iref_val, sizeof(iref_val), LD_CFG_I2C_TIMEOUT_MS);
+    ret = i2c_master_transmit_receive(
+        pca9955b->i2c_dev_handle, &iref0_reg_addr, sizeof(iref0_reg_addr), iref_val, sizeof(iref_val), LD_CFG_I2C_TIMEOUT_MS);
+    if(ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read IREF registers: %s", esp_err_to_name(ret));
+        return false;
+    }
 
     for(int i = 0; i < 15; i++) {
         if(iref_val[i] != 0xff) {
+            pca9955b->iref_loss = true;
             return false;
         }
     }
