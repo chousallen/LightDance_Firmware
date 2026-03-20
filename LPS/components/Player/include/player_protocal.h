@@ -13,6 +13,7 @@ typedef enum {
     EVENT_RELEASE,
     EVENT_LOAD,
     EVENT_EXIT,
+    EVENT_SEEK,
 } event_t;
 
 typedef enum {

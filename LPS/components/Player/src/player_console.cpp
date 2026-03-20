@@ -24,6 +24,12 @@ static int cmd_play(int argc, char** argv) {
     return 0;
 }
 
+static int cmd_seek(int argc, char** argv) {
+    uint32_t time = atoi(argv[1]);
+    Player::getInstance().seek(time);
+    return 0;
+}
+
 static int cmd_pause(int argc, char** argv) {
     Player::getInstance().pause();
     return 0;
@@ -116,6 +122,7 @@ static void register_all_commands(void) {
     // register_cmd("load", "load frames", &cmd_load);
     register_cmd("test", "test rgb output", &cmd_test);
     register_cmd("exit", "exit player", &cmd_exit);
+    register_cmd("seek", "seek time", &cmd_seek);
 }
 
 /* ================= console entry ================= */

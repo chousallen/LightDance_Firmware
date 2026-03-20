@@ -148,6 +148,9 @@ void Player::processEvent(Event& e) {
                 m_test_data = e.test_data;
 
                 switchState(PlayerState::TEST);
+            } else if(e.type == EVENT_SEEK) {
+                Player::getInstance().set_time_us(e.data);
+                switchState(PlayerState::PLAYING);
             } else
                 ESP_LOGW(TAG, "ReadyState: ignoring event %s", getEventName(e.type));
             break;
