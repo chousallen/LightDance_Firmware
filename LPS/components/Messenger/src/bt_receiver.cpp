@@ -574,6 +574,12 @@ static void sync_process_task(void* arg) {
                                  }
                                  s_visual_ack_done[current_cmd_id] = true;
                              }
+                             if (current_cmd != 0x07) {
+                                 s_last_locked_cmd.cmd_id = current_cmd_id;
+                                 s_last_locked_cmd.cmd_type = current_cmd;
+                                 s_last_locked_cmd.original_delay = (uint32_t)wait_us;
+                                 s_last_locked_cmd.lock_timestamp = esp_timer_get_time();
+                             }
                          }
                      }
                 }
