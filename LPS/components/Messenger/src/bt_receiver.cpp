@@ -59,6 +59,7 @@ typedef struct {
     volatile uint8_t target_cmd;    // Command action type (e.g., PLAY, PAUSE)
     volatile uint64_t target_mask;  // Target device bitmask
     volatile uint8_t data[3];       // Extra parameters (e.g., RGB values)
+    volatile uint64_t target_time_us; // SEEK target time
 } bt_action_context_t;
 
 #define MAX_CONCURRENT_ACTIONS 16
@@ -289,6 +290,7 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
                         uint8_t rcv_cmd = adv_data[offset + 4] & 0x0F;
                         uint32_t rcv_delay_ms = (adv_data[offset + 13] << 24) | (adv_data[offset + 14] << 16) | (adv_data[offset + 15] << 8) | (adv_data[offset + 16]);
                         uint32_t rcv_prep_ms = 0;
+                        uint32_t rcv_target_ms = 0;
                         uint8_t rcv_data[3] = {0, 0, 0};
                         
                         int spec_idx = offset + 17;
@@ -300,6 +302,8 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
                             rcv_data[2] = adv_data[spec_idx + 2];
                         } else if (rcv_cmd == 0x06) { 
                             rcv_data[0] = adv_data[spec_idx];
+                        } else if (rcv_cmd == 0x0A) {
+                            rcv_target_ms = (adv_data[spec_idx] << 24) | (adv_data[spec_idx + 1] << 16) | (adv_data[spec_idx + 2] << 8) | adv_data[spec_idx + 3];
                         }
                         ble_rx_packet_t pkt;
                         pkt.cmd_id = rcv_cmd_id;
@@ -307,6 +311,7 @@ static void IRAM_ATTR fast_parse_and_trigger(uint8_t* data, uint16_t len) {
                         pkt.target_mask = rcv_mask;
                         pkt.delay_val = rcv_delay_ms * 1000ULL;
                         pkt.prep_time = rcv_prep_ms * 1000ULL;
+                        pkt.target_time = rcv_target_ms * 1000ULL;
                         pkt.data[0] = rcv_data[0];
                         pkt.data[1] = rcv_data[1];
                         pkt.data[2] = rcv_data[2];
@@ -433,6 +438,9 @@ static void IRAM_ATTR timer_timeout_cb(void* arg) {
                 }
             }
             break;
+        case LPS_CMD_SEEK:
+            Player::getInstance().seek(slot->ctx.target_time_us);
+            break;
         default:
             break;
     }
@@ -446,6 +454,7 @@ static void sync_process_task(void* arg) {
     uint64_t current_mask = 0;
     uint8_t current_data[3] = {0, 0, 0};
     uint32_t current_prep_time = 0;
+    uint64_t current_target_time_us = 0;
     int64_t sum_rssi = 0;
     int64_t sum_target = 0;
     int count = 0;
@@ -468,7 +477,8 @@ static void sync_process_task(void* arg) {
                 current_data[0] = pkt.data[0];
                 current_data[1] = pkt.data[1];
                 current_data[2] = pkt.data[2];
-                current_prep_time = pkt.prep_time;    
+                current_prep_time = pkt.prep_time; 
+                current_target_time_us = pkt.target_time;   
                 sum_rssi = pkt.rssi;           
                 sum_target = (pkt.rx_time_us + pkt.delay_val); // Absolute target timestamp
                 count = 1;
@@ -496,6 +506,7 @@ static void sync_process_task(void* arg) {
                             action_slot_t* target_slot = &s_slots[current_cmd_id];
                             target_slot->ctx.target_cmd = current_cmd;
                             target_slot->ctx.target_mask = current_mask;
+                            target_slot->ctx.target_time_us = current_target_time_us;
                             memcpy((void*)target_slot->ctx.data, current_data, 3);
                             
                             esp_timer_stop(target_slot->timer_handle);
@@ -532,6 +543,7 @@ static void sync_process_task(void* arg) {
                     current_data[1] = pkt.data[1];
                     current_data[2] = pkt.data[2];
                     current_prep_time = pkt.prep_time;
+                    current_target_time_us = pkt.target_time;
                     sum_rssi = pkt.rssi;
                     window_start_time = now;
                     window_expired = false;
@@ -557,6 +569,7 @@ static void sync_process_task(void* arg) {
                          if(target_slot != NULL) {
                              target_slot->ctx.target_cmd = current_cmd;
                              target_slot->ctx.target_mask = current_mask;
+                             target_slot->ctx.target_time_us = current_target_time_us;
                              memcpy((void*)target_slot->ctx.data, current_data, 3);
                              
                              esp_timer_stop(target_slot->timer_handle);
