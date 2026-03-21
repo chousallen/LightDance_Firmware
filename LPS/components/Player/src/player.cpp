@@ -84,6 +84,30 @@ esp_err_t Player::exit() {
     return sendEvent(e);
 }
 
+esp_err_t Player::set_time_us(uint32_t start_time_us) {
+    ESP_RETURN_ON_ERROR(clock.set_time_us(start_time_us), TAG, "Failed to set clock time");
+    ESP_RETURN_ON_ERROR(fb.reset(), TAG, "Failed to reset framebuffer");
+
+    FbComputeStatus fb_status = fb.compute(start_time_us / 1000);
+    if(fb_status == FbComputeStatus::ERROR_GENERAL) {
+        ESP_LOGE(TAG, "framebuffer seek compute general error");
+        return ESP_FAIL;
+    }
+    if(fb_status == FbComputeStatus::ERROR_CRITICAL) {
+        ESP_LOGE(TAG, "framebuffer seek compute critical error");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t Player::seek(uint32_t start_time_us) {
+    Event e;
+    e.type = EVENT_SEEK;
+    e.data = start_time_us;
+    return sendEvent(e);
+}
+
 /* ================= Playback control (called by State) ================= */
 
 esp_err_t Player::startPlayback() {
@@ -114,8 +138,7 @@ esp_err_t Player::updatePlayback() {
         e.type = EVENT_STOP;
         ESP_RETURN_ON_ERROR(sendEvent(e), TAG, "stop event on framebuffer error");
         // return ESP_FAIL;
-    }
-    else if(fb_status == FbComputeStatus::ERROR_CRITICAL) {
+    } else if(fb_status == FbComputeStatus::ERROR_CRITICAL) {
         ESP_LOGE(TAG, "framebuffer compute critical error");
         Event e{};
         e.type = EVENT_RELEASE;

@@ -1,4 +1,5 @@
 ﻿#include "esp_log.h"
+#include "esp_err.h"
 #include "player.hpp"
 
 static const char* TAG = "Player_fsm.cpp";
@@ -19,6 +20,8 @@ const char* getEventName(int type) {
             return "TEST";
         case EVENT_EXIT:
             return "EXIT";
+        case EVENT_SEEK:
+            return "SEEK";
         default:
             return "UNKNOWN";
     }
@@ -146,8 +149,12 @@ void Player::processEvent(Event& e) {
                 switchState(PlayerState::UNLOADED);
             else if(e.type == EVENT_TEST) {
                 m_test_data = e.test_data;
-
                 switchState(PlayerState::TEST);
+            } else if(e.type == EVENT_SEEK) {
+                esp_err_t err = Player::getInstance().set_time_us(e.data);
+                if(err != ESP_OK) {
+                    ESP_LOGE(TAG, "seek failed: %s", esp_err_to_name(err));
+                }
             } else
                 ESP_LOGW(TAG, "ReadyState: ignoring event %s", getEventName(e.type));
             break;

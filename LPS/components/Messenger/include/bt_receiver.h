@@ -18,6 +18,7 @@ typedef struct {
     uint64_t target_mask;
     uint32_t delay_val;
     uint32_t prep_time;
+    uint32_t target_time;
     uint8_t data[3];
     int8_t rssi;
     int64_t rx_time_us;
@@ -34,7 +35,8 @@ typedef enum {
     LPS_CMD_CANCEL  = 0x06,
     LPS_CMD_CHECK   = 0x07,
     LPS_CMD_UPLOAD  = 0x08,
-    LPS_CMD_RESET   = 0x09
+    LPS_CMD_RESET   = 0x09,
+    LPS_CMD_SEEK    = 0x0A
 } lps_cmd_t;
 
 typedef enum {

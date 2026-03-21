@@ -20,8 +20,8 @@ enum class FbComputeStatus : uint8_t {
     OK = 0,
     HOLD,
     EOF_REACHED,
-    ERROR_GENERAL, 
-    ERROR_CRITICAL
+    ERROR_GENERAL,
+    ERROR_CRITICAL,
 };
 
 class FrameBuffer {

@@ -132,7 +132,7 @@ The remaining bytes:
 
 | Offset | Length | Value | Description |
 | --- | --- | --- | --- |
-| **18** | 4 | `prep_led_us` | Preparation Time (Big Endian) |
+| **18** | 4 | `prep_led_ms` | Preparation Time (Big Endian) |
 
 * `TEST`
 
@@ -147,6 +147,12 @@ The remaining bytes:
 | --- | --- | --- | --- |
 | **18** | 1 | `cmd_id` | the cmd id that you want to cancel |
 | **19** | 3 | `0` | padding |
+
+* `SEEK`
+
+| Offset | Length | Value | Description |
+| --- | --- | --- | --- |
+| **18** | 4 | `target_time_ms` | The specific timeline position to seek to (Big Endian) |
 
 **Total Length**: 22 Bytes.
 
@@ -179,3 +185,4 @@ These values are defined in the `timer_timeout_cb` function within `bt_receiver.
 | `0x07` | `LPS_CMD_CHECK` | **Check** | None | No |
 | `0x08` | `LPS_CMD_UPLOAD` | **Upload** | None | YES (GREEN) |
 | `0x09` | `LPS_CMD_RESET` | **Reset** | None | No |
+| `0x09` | `LPS_CMD_SEEK` | **Seek** | None | No |
