@@ -10,6 +10,8 @@
 #define PCA9955B_PWM0_ADDR 0x08  // Address of PWM0 register
 #define PCA9955B_AUTO_INC 0x80   // Auto-Increment for all registers
 #define PCA9955B_IREFALL_ADDR 0x45
+#define PCA9955B_MODE2_ADDR 0x01
+#define PCA9955B_MODE2_OVERTEMP_BIT BIT(7)
 
 static const char* TAG = "PCA9955B";
 
@@ -67,6 +69,8 @@ esp_err_t pca9955b_init(pca9955b_dev_t* pca9955b, uint8_t i2c_addr, i2c_master_b
 
     pca9955b->i2c_addr = i2c_addr;
     pca9955b->need_reset_IREF = true;
+    pca9955b->iref_loss = false;
+    pca9955b->overtemp = false;
 
     pca9955b->buffer.command_byte = PCA9955B_PWM0_ADDR | PCA9955B_AUTO_INC;
     memset(pca9955b->buffer.data, 0, sizeof(pca9955b->buffer.data));
@@ -204,13 +208,38 @@ esp_err_t pca9955b_fill(pca9955b_dev_t* pca9955b, grb8_t color) {
 bool pca9955b_check_iref(pca9955b_dev_t* pca9955b) {
     uint8_t iref0_reg_addr = 0x18 | PCA9955B_AUTO_INC;
     uint8_t iref_val[15] = {0};
+    esp_err_t ret = ESP_OK;
 
-    i2c_master_transmit_receive(pca9955b->i2c_dev_handle, &iref0_reg_addr, sizeof(iref0_reg_addr), iref_val, sizeof(iref_val), LD_CFG_I2C_TIMEOUT_MS);
+    ret = i2c_master_transmit_receive(pca9955b->i2c_dev_handle, &iref0_reg_addr, sizeof(iref0_reg_addr), iref_val, sizeof(iref_val), LD_CFG_I2C_TIMEOUT_MS);
+    if(ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read IREF registers: %s", esp_err_to_name(ret));
+        return false;
+    }
 
     for(int i = 0; i < 15; i++) {
         if(iref_val[i] != 0xff) {
+            pca9955b->iref_loss = true;
             return false;
         }
+    }
+
+    return true;
+}
+
+bool pca9955b_check_overtemp(pca9955b_dev_t* pca9955b) {
+    uint8_t mode2_reg_addr = PCA9955B_MODE2_ADDR;
+    uint8_t mode2_reg_val = 0;
+    esp_err_t ret = ESP_OK;
+
+    ret = i2c_master_transmit_receive(pca9955b->i2c_dev_handle, &mode2_reg_addr, sizeof(mode2_reg_addr), &mode2_reg_val, sizeof(mode2_reg_val), LD_CFG_I2C_TIMEOUT_MS);
+    if(ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read MODE2 register: %s", esp_err_to_name(ret));
+        return false;
+    }
+
+    if(mode2_reg_val & PCA9955B_MODE2_OVERTEMP_BIT) {
+        pca9955b->overtemp = true;
+        return false;
     }
 
     return true;

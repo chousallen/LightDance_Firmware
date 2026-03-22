@@ -30,6 +30,114 @@ static bool sd_mounted = false;
 static bool logger_inited = false;
 static bool frame_inited = false;
 
+static void print_restart_reason() {
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char* reason_name = "UNKNOWN";
+    const char* reason_desc = "Reset reason is not recognized.";
+    bool is_error = false;
+    bool is_warning = false;
+
+    switch(reason) {
+        case ESP_RST_UNKNOWN:
+            reason_name = "UNKNOWN";
+            reason_desc = "Reset reason could not be determined.";
+            is_warning = true;
+            break;
+        case ESP_RST_POWERON:
+            reason_name = "POWERON";
+            reason_desc = "Normal power-on reset.";
+            break;
+        case ESP_RST_EXT:
+            reason_name = "EXT";
+            reason_desc = "External reset signal triggered reboot.";
+            break;
+        case ESP_RST_SW:
+            reason_name = "SW";
+            reason_desc = "Software requested a restart.";
+            is_warning = true;
+            break;
+        case ESP_RST_PANIC:
+            reason_name = "PANIC";
+            reason_desc = "System rebooted after a fatal exception.";
+            is_error = true;
+            break;
+        case ESP_RST_INT_WDT:
+            reason_name = "INT_WDT";
+            reason_desc = "Interrupt watchdog timeout.";
+            is_error = true;
+            break;
+        case ESP_RST_TASK_WDT:
+            reason_name = "TASK_WDT";
+            reason_desc = "Task watchdog timeout.";
+            is_error = true;
+            break;
+        case ESP_RST_WDT:
+            reason_name = "WDT";
+            reason_desc = "Other watchdog triggered a reset.";
+            is_error = true;
+            break;
+        case ESP_RST_DEEPSLEEP:
+            reason_name = "DEEPSLEEP";
+            reason_desc = "Wake-up from deep sleep.";
+            break;
+        case ESP_RST_BROWNOUT:
+            reason_name = "BROWNOUT";
+            reason_desc = "Power supply voltage dropped too low.";
+            is_error = true;
+            break;
+        case ESP_RST_SDIO:
+            reason_name = "SDIO";
+            reason_desc = "Reset triggered by SDIO subsystem.";
+            is_warning = true;
+            break;
+        case ESP_RST_USB:
+            reason_name = "USB";
+            reason_desc = "Reset triggered by USB subsystem.";
+            is_warning = true;
+            break;
+        case ESP_RST_JTAG:
+            reason_name = "JTAG";
+            reason_desc = "Reset triggered via JTAG.";
+            is_warning = true;
+            break;
+        case ESP_RST_EFUSE:
+            reason_name = "EFUSE";
+            reason_desc = "eFuse related reset.";
+            is_error = true;
+            break;
+        case ESP_RST_PWR_GLITCH:
+            reason_name = "PWR_GLITCH";
+            reason_desc = "Power glitch detected.";
+            is_error = true;
+            break;
+        case ESP_RST_CPU_LOCKUP:
+            reason_name = "CPU_LOCKUP";
+            reason_desc = "CPU lockup detected.";
+            is_error = true;
+            break;
+        default:
+            is_warning = true;
+            break;
+    }
+
+    if(is_error) {
+        ESP_LOGE(TAG, "================ RESET REASON ================");
+        ESP_LOGE(TAG, " reason : %s (%d)", reason_name, reason);
+        ESP_LOGE(TAG, " detail : %s", reason_desc);
+        ESP_LOGE(TAG, "==============================================");
+    } else if(is_warning) {
+        ESP_LOGW(TAG, "================ RESET REASON ================");
+        ESP_LOGW(TAG, " reason : %s (%d)", reason_name, reason);
+        ESP_LOGW(TAG, " detail : %s", reason_desc);
+        ESP_LOGW(TAG, "==============================================");
+    } else {
+        ESP_LOGI(TAG, "================ RESET REASON ================");
+        ESP_LOGI(TAG, " reason : %s (%d)", reason_name, reason);
+        ESP_LOGI(TAG, " detail : %s", reason_desc);
+        ESP_LOGI(TAG, "==============================================");
+    }
+}
+
 /* * Background task to handle system-level commands asynchronously.
  * Receives messages from BLE receiver or TCP client.
  */
@@ -133,6 +241,8 @@ static void app_task(void* arg) {
 
 #endif
 
+    print_restart_reason();
+
     // 3. Pre-calculate Gamma Lookup Table for LED color correction
     calc_gamma_lut();
 
@@ -151,7 +261,7 @@ static void app_task(void* arg) {
 
     // 6. Create System Command Queue and spawn its handler task
     sys_cmd_queue = xQueueCreate(10, sizeof(sys_cmd_t));
-    //sd_log_flush();
+    // sd_log_flush();
     if(sys_cmd_queue != NULL) {
         xTaskCreate(sys_cmd_task, "sys_cmd_task", 4096, NULL, 5, NULL);
     } else {

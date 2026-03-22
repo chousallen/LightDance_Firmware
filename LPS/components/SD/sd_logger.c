@@ -47,37 +47,47 @@ static void flush_buffer(void) {
     }
 }
 
+static bool immediate_log(const char* fmt) {
+    if (!fmt) return
+        false;
+
+    char first_char = fmt[0];
+    if(first_char == 'E' || first_char == 'W')
+        return true;
+    return false;
+}
+
 static int ring_buffer_write(const char* fmt, va_list args) {
     if (!g_buf || !g_buf->running) return 0;
     
-    char temp[TEMP_BUFFER_SIZE];
-    int len = vsnprintf(temp, sizeof(temp), fmt, args);
-    if (len <= 0) return 0;
-    
-    xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
-    
-    // uint32_t free_space;
-    // if (g_buf->head >= g_buf->tail) {
-    //     free_space = BUFFER_SIZE - (g_buf->head - g_buf->tail) - 1;
-    // }
-    // else {
-    //     free_space = g_buf->tail - g_buf->head - 1;
-    // }
-    
-    // // buffer not enough -> flush
-    // if (free_space < (uint32_t)len) {
-    //     flush_buffer();
-    // }
-    
-    // write new data
-    for (int i = 0; i < len; i++) {
-        uint32_t next = (g_buf->head + 1) % BUFFER_SIZE;
-        g_buf->data[g_buf->head] = temp[i];
-        g_buf->head = next;
+    if (immediate_log(fmt)) {
+        // warning or error: direct flush into sd card
+        xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
+        if (g_buf->file) {
+            vfprintf(g_buf->file, fmt, args);
+            fflush(g_buf->file);
+            fsync(fileno(g_buf->file));
+        }
+        xSemaphoreGive(g_buf->mutex);
+        return 0;
     }
-    
-    xSemaphoreGive(g_buf->mutex);
-    return len;
+    else {
+        // not warning or error: into ring buffer
+        char temp[TEMP_BUFFER_SIZE];
+        int len = vsnprintf(temp, sizeof(temp), fmt, args);
+        if (len <= 0) return 0;
+        
+        xSemaphoreTake(g_buf->mutex, portMAX_DELAY);
+        
+        for (int i = 0; i < len; i++) {
+            uint32_t next = (g_buf->head + 1) % BUFFER_SIZE;
+            g_buf->data[g_buf->head] = temp[i];
+            g_buf->head = next;
+        }
+
+        xSemaphoreGive(g_buf->mutex);
+        return len;
+    }
 }
 
 static void flush_task(void* arg) {
