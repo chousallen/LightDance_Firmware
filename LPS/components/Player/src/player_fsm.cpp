@@ -1,5 +1,5 @@
-﻿#include "esp_log.h"
-#include "esp_err.h"
+﻿#include "esp_err.h"
+#include "esp_log.h"
 #include "player.hpp"
 
 static const char* TAG = "Player_fsm.cpp";
@@ -151,10 +151,12 @@ void Player::processEvent(Event& e) {
                 m_test_data = e.test_data;
                 switchState(PlayerState::TEST);
             } else if(e.type == EVENT_SEEK) {
+                ESP_LOGI(TAG, "seek start");
                 esp_err_t err = Player::getInstance().set_time_us(e.data);
                 if(err != ESP_OK) {
                     ESP_LOGE(TAG, "seek failed: %s", esp_err_to_name(err));
                 }
+                ESP_LOGI(TAG, "seek end");
             } else
                 ESP_LOGW(TAG, "ReadyState: ignoring event %s", getEventName(e.type));
             break;
